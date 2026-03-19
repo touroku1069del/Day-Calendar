@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日めくりカレンダー React版</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Import Map for ES Modules -->
+  <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.344.0",
+            "firebase/app": "data:text/javascript,export function initializeApp() { return {}; }",
+            "firebase/auth": "data:text/javascript,export function getAuth() { return {}; } export function signInAnonymously() { return Promise.resolve(); } export function signInWithCustomToken() { return Promise.resolve(); } export function onAuthStateChanged(a, cb) { cb({ uid: 'mock-user' }); return () => {}; }",
+            "firebase/firestore": "data:text/javascript,export function getFirestore() { return {}; } export function doc() { return {}; } export function setDoc() { return Promise.resolve(); } export function onSnapshot(d, cb, err) { cb({ exists: () => false, data: () => ({}) }); return () => {}; }"
+        }
+    }
+    </script>
+
+  <!-- Babel for in-browser JSX compilation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect, useMemo } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { Settings, Plus, Check, MessageSquare, Trash2, Edit2, Save, X } from 'lucide-react';
+    import { initializeApp } from 'firebase/app';
+    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+    import { getFirestore } from 'firebase/firestore';
+
+    // --- Configuration & Mock ---
+    const DAILY_QUOTES_MAP = {
+      1: "夢を形にする日。新しい自分を始めよう。",
+      2: "昨日の自分を超えていく。", 3: "集中。目の前のことに全力を。",
+      4: "失敗は、成功への準備運動。", 5: "深呼吸。心を整えてから歩き出す。",
+      6: "「今」を大切に、一歩ずつ。", 7: "休息は、次の跳躍へのエネルギー。",
+      8: "限界は、自分で決めるものじゃない。", 9: "思考より行動。まずは動いてみる。",
+      10: "感謝から始まる、最高の1日。", 11: "シンプルに。答えはいつも内側にある。",
+      12: "困難な道は、成長への近道。", 13: "自分のペースが、一番の近道。",
+      14: "アウトプットで世界を広げる。", 15: "目標を再確認。ここからが本番。",
+      16: "笑顔こそ、最強のパフォーマンス。", 17: "今日という奇跡を、全力で楽しむ。",
+      18: "小さな継続が、大きな奇跡を生む。", 19: "「できる」と信じることから始まる。",
+      20: "知識を、力に変える日。", 21: "執着を捨てて、軽やかに進む。",
+      22: "完璧より、完了を目指そう。", 23: "誠実さが、未来の扉を開く。",
+      24: "静寂の中で、創造力を研ぎ澄ます。", 25: "ラストスパート。自分を信じて。",
+      26: "謙虚に学び、大胆に行動する。", 27: "直感は、魂からのメッセージ。",
+      28: "逆境を、最高のチャンスに変える。", 29: "良い準備が、良い結果を連れてくる。",
+      30: "今日まで歩んできた自分を讃える。", 31: "次のステージへ。更なる高みへ。"
+    };
+
+    // Firebase Initialization
+    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    export default function App() {
+      const [user, setUser] = useState(null);
+      const [loading, setLoading] = useState(true);
+
+      // UI State
+      const [isEditingQuote, setIsEditingQuote] = useState(false);
+      const [isEditingGoals, setIsEditingGoals] = useState(false);
+      const [isEditingFuture, setIsEditingFuture] = useState(false);
+
+      const [newGoal, setNewGoal] = useState("");
+
+      // --- Date Logic ---
+      const { year, month, date, dayName, dateKey, tomorrowDate, dayAfterDate } = useMemo(() => {
+        const now = new Date();
+        const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+        const tom = new Date(now); tom.setDate(now.getDate() + 1);
+        const dat = new Date(now); dat.setDate(now.getDate() + 2);
+        return {
+          year: now.getFullYear(),
+          month: now.getMonth() + 1,
+          date: now.getDate(),
+          dayName: weekdays[now.getDay()],
+          dateKey: `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`,
+          tomorrowDate: tom.getDate(),
+          dayAfterDate: dat.getDate(),
+        };
+      }, []);
+
+      // Main Data State
+      const [todayData, setTodayData] = useState({
+        quote: DAILY_QUOTES_MAP[date] || "夢を形にする日。",
+        goals: [],
+        futureEvents: ["予定なし", "予定なし"]
+      });
+
+      // --- Firebase Auth & Local Storage Load ---
+      useEffect(() => {
+        const initAuth = async () => {
+          try {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+              await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+              await signInAnonymously(auth);
+            }
+          } catch (e) { console.error("Auth Error:", e); }
+        };
+        initAuth();
+        const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
+        return () => unsubscribe();
+      }, []);
+
+      useEffect(() => {
+        if (!user) return;
+        const storageKey = `calendarData_${user.uid}_${dateKey}`;
+        const storedData = localStorage.getItem(storageKey);
+        if (storedData) {
+          try {
+            const data = JSON.parse(storedData);
+            setTodayData(prev => ({
+              ...prev,
+              ...data,
+              quote: data.quote || DAILY_QUOTES_MAP[date],
+              futureEvents: data.futureEvents || ["予定なし", "予定なし"]
+            }));
+          } catch (e) { console.error("Data Load Error", e); }
+        }
+        setLoading(false);
+      }, [user, dateKey, date]);
+
+      // Persistence Helper
+      const persist = (updated) => {
+        if (!user) return;
+        const storageKey = `calendarData_${user.uid}_${dateKey}`;
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+      };
+
+      // --- Handlers ---
+      const handleAddGoal = () => {
+        if (!newGoal.trim()) return;
+        const updated = {
+          ...todayData,
+          goals: [...(todayData.goals || []), { id: Date.now().toString(), text: newGoal.trim(), completed: false }]
+        };
+        setTodayData(updated); persist(updated); setNewGoal("");
+      };
+
+      const toggleGoal = (id) => {
+        const updated = {
+          ...todayData,
+          goals: (todayData.goals || []).map(g => g.id === id ? { ...g, completed: !g.completed } : g)
+        };
+        setTodayData(updated); persist(updated);
+      };
+
+      const deleteGoal = (id) => {
+        const updated = {
+          ...todayData,
+          goals: (todayData.goals || []).filter(g => g.id !== id)
+        };
+        setTodayData(updated); persist(updated);
+      };
+
+      const editGoalText = (id, text) => {
+        const updated = {
+          ...todayData,
+          goals: (todayData.goals || []).map(g => g.id === id ? { ...g, text } : g),
+        };
+        setTodayData(updated);
+        persist(updated);
+      };
+
+      const handleFutureEdit = (index, value) => {
+        const newFuture = [...(todayData.futureEvents || ["予定なし", "予定なし"])];
+        newFuture[index] = value;
+        const updated = { ...todayData, futureEvents: newFuture };
+        setTodayData(updated); persist(updated);
+      };
+
+      if (loading && !user) return <div className="min-h-screen bg-[#3b66de]" />;
+
+      return (
+        <div className="flex justify-center h-screen bg-slate-100 font-sans text-[#334155] overflow-hidden">
+          <div className="w-full max-w-md bg-white flex flex-col relative h-full shadow-2xl overflow-hidden">
+
+            {/* Header Section */}
+            <div className="bg-[#3b66de] text-white flex h-[240px] relative flex-shrink-0 shadow-md">
+              <div className="w-1/2 flex flex-col items-center justify-center py-6 px-4">
+                <div className="text-lg font-bold tracking-wider">{year}年{month}月</div>
+                <div className="flex items-baseline justify-center -mt-2">
+                  <span className="text-[100px] font-black leading-none tracking-tighter">{date}</span>
+                  <span className="text-2xl font-bold ml-1">({dayName})</span>
+                </div>
+              </div>
+              <div className="w-1/2 h-full overflow-hidden rounded-bl-[40px] bg-slate-200 flex flex-col items-center justify-center text-slate-400 border-l border-white/10">
+                <span className="font-bold tracking-widest text-sm">写真スペース</span>
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <main className="flex-1 bg-white -mt-10 rounded-t-[40px] px-6 pt-8 space-y-6 overflow-hidden flex flex-col relative z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
+
+              {/* 今日の言葉 */}
+              <section className="flex-shrink-0">
+                <div className="flex items-center justify-between mb-3 text-[#3b66de]">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare size={18} className="stroke-[3px]" />
+                    <h2 className="text-sm font-black tracking-widest uppercase">今日の言葉</h2>
+                  </div>
+                  <button
+                    onClick={() => setIsEditingQuote(!isEditingQuote)}
+                    className={`transition-all p-1.5 rounded-lg ${isEditingQuote ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-[#3b66de]'}`}
+                  >
+                    {isEditingQuote ? <Save size={16} /> : <Edit2 size={16} />}
+                  </button>
+                </div>
+                {isEditingQuote ? (
+                  <textarea
+                    value={todayData.quote}
+                    onChange={(e) => {
+                      const updated = { ...todayData, quote: e.target.value };
+                      setTodayData(updated);
+                      persist(updated);
+                    }}
+                    className="w-full p-3 border-2 border-blue-100 rounded-xl text-xl font-bold italic outline-none focus:border-[#3b66de] bg-blue-50/30"
+                    rows="2"
+                    autoFocus
+                  />
+                ) : (
+                  <div className="pl-4 border-l-[6px] border-[#3b66de] py-1">
+                    <p className="text-2xl font-black italic leading-tight tracking-tight text-slate-800">
+                      {todayData.quote}
+                    </p>
+                  </div>
+                )}
+              </section>
+
+              {/* 今日の目標 */}
+              <section className="flex-1 overflow-hidden flex flex-col min-h-0">
+                <div className="flex items-center justify-between mb-3 text-[#3b66de]">
+                  <div className="flex items-center gap-2">
+                    <Check size={20} className="stroke-[4px]" />
+                    <h2 className="text-sm font-black tracking-widest uppercase">今日の目標</h2>
+                  </div>
+                  <button
+                    onClick={() => setIsEditingGoals(!isEditingGoals)}
+                    className={`transition-all p-1.5 rounded-lg ${isEditingGoals ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-[#3b66de]'}`}
+                  >
+                    {isEditingGoals ? <Save size={16} /> : <Edit2 size={16} />}
+                  </button>
+                </div>
+
+                <div className="overflow-y-auto space-y-2 pr-1 pb-2 flex-1 scroll-smooth custom-scrollbar">
+                  {(todayData.goals || []).map((goal) => (
+                    <div
+                      key={goal.id}
+                      className={`group flex items-center px-4 py-3 rounded-[20px] border transition-all ${goal.completed ? 'bg-slate-50 border-transparent opacity-60' : 'bg-white border-blue-50 shadow-sm'}`}
+                    >
+                      <div className="flex items-center gap-4 flex-1">
+                        <button
+                          onClick={() => toggleGoal(goal.id)}
+                          className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all flex-shrink-0 ${goal.completed ? 'bg-[#3b66de] border-[#3b66de]' : 'border-slate-200 bg-white'}`}
+                        >
+                          {goal.completed && <Check size={16} className="text-white stroke-[4px]" />}
+                        </button>
+                        {isEditingGoals ? (
+                          <input
+                            type="text"
+                            value={goal.text}
+                            onChange={(e) => editGoalText(goal.id, e.target.value)}
+                            className="flex-1 bg-transparent border-b border-blue-200 py-1 text-lg font-bold text-[#334155] outline-none focus:border-[#3b66de]"
+                          />
+                        ) : (
+                          <span className={`text-lg font-bold ${goal.completed ? 'text-slate-300 line-through' : 'text-[#334155]'}`}>
+                            {goal.text}
+                          </span>
+                        )}
+                      </div>
+                      {isEditingGoals && (
+                        <button onClick={() => deleteGoal(goal.id)} className="text-rose-400 p-1 ml-2 hover:bg-rose-50 rounded-full transition-colors">
+                          <X size={20} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {isEditingGoals && (
+                  <div className="relative mt-4 flex-shrink-0 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <input
+                      type="text"
+                      value={newGoal}
+                      onChange={(e) => setNewGoal(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleAddGoal()}
+                      placeholder="新しい目標を追加..."
+                      className="w-full bg-slate-100/80 border-none rounded-[22px] pl-6 pr-16 py-4 text-lg font-bold outline-none placeholder:text-slate-300 shadow-inner focus:bg-slate-100 transition-colors"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleAddGoal}
+                      className="absolute right-2 top-2 bg-[#3b66de] text-white w-12 h-12 rounded-[18px] flex items-center justify-center shadow-lg active:scale-90 transition-all hover:bg-blue-600"
+                    >
+                      <Plus size={28} className="stroke-[4px]" />
+                    </button>
+                  </div>
+                )}
+              </section>
+
+              {/* COMING UP */}
+              <section className="pb-10 flex-shrink-0 border-t pt-6 border-slate-50">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-black text-slate-300 uppercase tracking-[0.4em]">COMING UP</h3>
+                  <button
+                    onClick={() => setIsEditingFuture(!isEditingFuture)}
+                    className={`transition-all p-1.5 rounded-lg ${isEditingFuture ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-[#3b66de]'}`}
+                  >
+                    {isEditingFuture ? <Save size={14} /> : <Edit2 size={14} />}
+                  </button>
+                </div>
+                <div className="space-y-5">
+                  {[tomorrowDate, dayAfterDate].map((d, i) => (
+                    <div key={i} className="flex items-center text-slate-400 font-bold text-xl min-h-[40px]">
+                      <div className="w-12 flex-shrink-0">{d}日</div>
+                      <div className="w-2.5 h-2.5 rounded-full bg-blue-100 mx-3 flex-shrink-0"></div>
+                      {isEditingFuture ? (
+                        <input
+                          type="text"
+                          value={todayData.futureEvents[i] || ""}
+                          onChange={(e) => handleFutureEdit(i, e.target.value)}
+                          className="flex-1 bg-blue-50/50 border-b border-blue-100 px-3 py-1 text-lg font-bold text-slate-600 outline-none focus:border-blue-400"
+                        />
+                      ) : (
+                        <div className="opacity-80 line-clamp-1 text-slate-500">{todayData.futureEvents[i] || "予定なし"}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </main>
+          </div>
+          <style>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+                .custom-scrollbar { scrollbar-width: thin; scrollbar-color: #e2e8f0 transparent; }
+              `}</style>
+        </div>
+      );
+    }
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+
+</html>
