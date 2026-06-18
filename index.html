@@ -34,7 +34,7 @@
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useMemo } from 'react';
     import { createRoot } from 'react-dom/client';
-    import { Settings, Plus, Check, MessageSquare, Trash2, Edit2, Save, X } from 'lucide-react';
+    import { Check, MessageSquare, Edit2, Save } from 'lucide-react';
     import { initializeApp } from 'firebase/app';
     import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
     import { getFirestore } from 'firebase/firestore';
@@ -59,6 +59,24 @@
       30: "今日まで歩んできた自分を讃える。", 31: "次のステージへ。更なる高みへ。"
     };
 
+    // デフォルトの今日の目標（保存が無い日に表示。タップして直接書き換え可）
+    const DEFAULT_GOALS = [
+      { id: "1", text: "深く呼吸する、紙に書く", completed: false },
+      { id: "2", text: "未来の自分との約束を守る", completed: false },
+      { id: "3", text: "だから優先順位を守る", completed: false },
+      { id: "4", text: "全てに感謝します", completed: false }
+    ];
+
+    // 保存データを常に4枠へ正規化（既存の文字は活かし、足りない枠だけデフォルトで補完）
+    const normalizeGoals = (arr) => {
+      const base = Array.isArray(arr) ? arr : [];
+      return DEFAULT_GOALS.map((d, i) => (
+        base[i]
+          ? { id: d.id, text: typeof base[i].text === 'string' ? base[i].text : "", completed: !!base[i].completed }
+          : { ...d }
+      ));
+    };
+
     // Firebase Initialization（本番は __firebase_config を注入。未設定時はローカル用モック）
     const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
     const app = initializeApp(firebaseConfig);
@@ -72,7 +90,6 @@
       // UI State
       const [isEditingQuote, setIsEditingQuote] = useState(false);
       const [isEditingFuture, setIsEditingFuture] = useState(false);
-      const [isEditingGoals, setIsEditingGoals] = useState(false);
 
       // --- Date Logic ---
       const { year, month, date, dayName, dateKey, tomorrowDate, dayAfterDate } = useMemo(() => {
@@ -94,7 +111,7 @@
       // Main Data State
       const [todayData, setTodayData] = useState({
         quote: DAILY_QUOTES_MAP[date] || "夢を形にする日。",
-        goals: [],
+        goals: normalizeGoals([]),
         futureEvents: ["", ""]
       });
 
@@ -128,7 +145,7 @@
               ...prev,
               ...data,
               quote: data.quote || DAILY_QUOTES_MAP[date],
-              goals: Array.isArray(data.goals) ? data.goals : (prev.goals || []),
+              goals: normalizeGoals(data.goals),
               futureEvents: data.futureEvents ?? ["", ""]
             }));
           } catch (e) { console.error("Data Load Error", e); }
@@ -144,20 +161,6 @@
       };
 
       // --- Handlers ---
-      // ＋ボタン（および編集中のEnter）で空の目標行を追加（最大4件）
-      const addEmptyGoal = () => {
-        setTodayData(prev => {
-          const current = Array.isArray(prev.goals) ? prev.goals : [];
-          if (current.length >= 4) return prev;
-          const updated = {
-            ...prev,
-            goals: [...current, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, text: "", completed: false }]
-          };
-          persist(updated);
-          return updated;
-        });
-      };
-
       const toggleGoal = (id) => {
         setTodayData(prev => {
           const list = Array.isArray(prev.goals) ? prev.goals : [];
@@ -165,15 +168,6 @@
             ...prev,
             goals: list.map(g => g.id === id ? { ...g, completed: !g.completed } : g)
           };
-          persist(updated);
-          return updated;
-        });
-      };
-
-      const deleteGoal = (id) => {
-        setTodayData(prev => {
-          const list = Array.isArray(prev.goals) ? prev.goals : [];
-          const updated = { ...prev, goals: list.filter(g => g.id !== id) };
           persist(updated);
           return updated;
         });
@@ -256,25 +250,15 @@
                 )}
               </section>
 
-              {/* 今日の目標（鉛筆で編集・＋で追加・最大4件入力／3件表示でスクロール） */}
+              {/* 今日の目標（プリセット4件・タップして直接書き換え／3件表示でスクロール） */}
               <section className="flex-1 flex flex-col min-h-0">
-                <div className="flex items-center justify-between mb-3 text-[#2d4ed6]">
-                  <div className="flex items-center">
-                    <Check size={20} className="stroke-[4px]" />
-                    <h2 className="text-sm font-black tracking-widest uppercase ml-2">今日の目標</h2>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingGoals(!isEditingGoals)}
-                    className={`transition-all p-1.5 rounded-lg ${isEditingGoals ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-[#2d4ed6]'}`}
-                    aria-label={isEditingGoals ? '編集を終了' : '目標を編集'}
-                  >
-                    {isEditingGoals ? <Save size={14} /> : <Edit2 size={14} />}
-                  </button>
+                <div className="flex items-center mb-3 text-[#2d4ed6]">
+                  <Check size={20} className="stroke-[4px]" />
+                  <h2 className="text-sm font-black tracking-widest uppercase ml-2">今日の目標</h2>
                 </div>
 
                 <div className="overflow-y-auto space-y-2 pr-1 pb-1 max-h-[176px] scroll-smooth custom-scrollbar">
-                  {(Array.isArray(todayData.goals) ? todayData.goals : []).map((goal) => (
+                  {(Array.isArray(todayData.goals) ? todayData.goals : []).map((goal, i) => (
                     <div
                       key={goal.id}
                       className={`flex items-center px-4 py-3 rounded-[20px] border transition-all ${goal.completed ? 'bg-slate-50 border-transparent opacity-60' : 'bg-white border-blue-50 shadow-sm'}`}
@@ -284,47 +268,21 @@
                           type="button"
                           onClick={() => toggleGoal(goal.id)}
                           className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all flex-shrink-0 ${goal.completed ? 'bg-[#2d4ed6] border-[#2d4ed6]' : 'border-slate-200 bg-white'}`}
+                          aria-label="完了の切り替え"
                         >
                           {goal.completed && <Check size={16} className="text-white stroke-[4px]" />}
                         </button>
-                        {isEditingGoals ? (
-                          <>
-                            <input
-                              type="text"
-                              value={goal.text}
-                              onChange={(e) => editGoalText(goal.id, e.target.value)}
-                              onKeyDown={(e) => e.key === 'Enter' && addEmptyGoal()}
-                              className="flex-1 min-w-0 bg-blue-50/50 border-b border-blue-100 px-2 py-1 text-lg font-bold text-[#334155] outline-none focus:border-blue-400 rounded-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => deleteGoal(goal.id)}
-                              className="p-1.5 text-slate-300 hover:text-red-500 flex-shrink-0"
-                              aria-label="この目標を削除"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </>
-                        ) : (
-                          <span className={`text-lg font-bold flex-1 min-w-0 truncate ${goal.completed ? 'text-slate-300 line-through' : 'text-[#334155]'}`}>
-                            {goal.text}
-                          </span>
-                        )}
+                        <input
+                          type="text"
+                          value={goal.text}
+                          onChange={(e) => editGoalText(goal.id, e.target.value)}
+                          placeholder={`目標 ${i + 1}`}
+                          className={`flex-1 min-w-0 bg-transparent border-none outline-none text-lg font-bold placeholder:text-slate-300 ${goal.completed ? 'text-slate-300 line-through' : 'text-[#334155]'}`}
+                        />
                       </div>
                     </div>
                   ))}
                 </div>
-                {isEditingGoals && (Array.isArray(todayData.goals) ? todayData.goals : []).length < 4 && (
-                  <button
-                    type="button"
-                    onClick={addEmptyGoal}
-                    className="mt-2 flex items-center justify-center gap-2 px-4 py-3 rounded-[20px] border-2 border-dashed border-blue-200 text-[#2d4ed6] font-bold text-base bg-blue-50/40 hover:bg-blue-50 transition-all"
-                    aria-label="目標を追加"
-                  >
-                    <Plus size={18} className="stroke-[3px]" />
-                    目標を追加
-                  </button>
-                )}
               </section>
 
               {/* COMING UP */}
