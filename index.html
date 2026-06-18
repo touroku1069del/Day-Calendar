@@ -74,8 +74,6 @@
       const [isEditingFuture, setIsEditingFuture] = useState(false);
       const [isEditingGoals, setIsEditingGoals] = useState(false);
 
-      const [newGoal, setNewGoal] = useState("");
-
       // --- Date Logic ---
       const { year, month, date, dayName, dateKey, tomorrowDate, dayAfterDate } = useMemo(() => {
         const now = new Date();
@@ -146,20 +144,18 @@
       };
 
       // --- Handlers ---
-      const handleAddGoal = () => {
-        const text = newGoal.trim();
-        if (!text) return;
+      // ＋ボタン（および編集中のEnter）で空の目標行を追加（最大4件）
+      const addEmptyGoal = () => {
         setTodayData(prev => {
           const current = Array.isArray(prev.goals) ? prev.goals : [];
           if (current.length >= 4) return prev;
           const updated = {
             ...prev,
-            goals: [...current, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, text, completed: false }]
+            goals: [...current, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, text: "", completed: false }]
           };
           persist(updated);
           return updated;
         });
-        setNewGoal("");
       };
 
       const toggleGoal = (id) => {
@@ -202,14 +198,14 @@
         setTodayData(updated); persist(updated);
       };
 
-      if (loading && !user) return <div className="min-h-screen bg-[#3b66de]" />;
+      if (loading && !user) return <div className="min-h-screen bg-[#2d4ed6]" />;
 
       return (
         <div className="flex justify-center h-screen bg-slate-100 font-sans text-[#334155] overflow-hidden">
           <div className="w-full max-w-md bg-white flex flex-col relative h-full shadow-2xl overflow-hidden">
 
             {/* Header Section */}
-            <div className="bg-[#3b66de] text-white flex h-[240px] relative flex-shrink-0 shadow-md">
+            <div className="bg-[#2d4ed6] text-white flex h-[240px] relative flex-shrink-0 shadow-md">
               <div className="w-1/2 flex flex-col items-center justify-center py-6 px-4">
                 <div className="text-lg font-bold tracking-wider">{year}年{month}月</div>
                 <div className="flex items-baseline justify-center -mt-2">
@@ -227,14 +223,14 @@
 
               {/* 今日の言葉 */}
               <section className="flex-shrink-0">
-                <div className="flex items-center justify-between mb-3 text-[#3b66de]">
+                <div className="flex items-center justify-between mb-3 text-[#2d4ed6]">
                   <div className="flex items-center gap-2">
                     <MessageSquare size={18} className="stroke-[3px]" />
                     <h2 className="text-sm font-black tracking-widest uppercase">今日の言葉</h2>
                   </div>
                   <button
                     onClick={() => setIsEditingQuote(!isEditingQuote)}
-                    className={`transition-all p-1.5 rounded-lg ${isEditingQuote ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-[#3b66de]'}`}
+                    className={`transition-all p-1.5 rounded-lg ${isEditingQuote ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-[#2d4ed6]'}`}
                   >
                     {isEditingQuote ? <Save size={16} /> : <Edit2 size={16} />}
                   </button>
@@ -247,12 +243,12 @@
                       setTodayData(updated);
                       persist(updated);
                     }}
-                    className="w-full p-3 border-2 border-blue-100 rounded-xl text-xl font-bold italic outline-none focus:border-[#3b66de] bg-blue-50/30"
+                    className="w-full p-3 border-2 border-blue-100 rounded-xl text-xl font-bold italic outline-none focus:border-[#2d4ed6] bg-blue-50/30"
                     rows="2"
                     autoFocus
                   />
                 ) : (
-                  <div className="pl-4 border-l-[6px] border-[#3b66de] py-1">
+                  <div className="pl-4 border-l-[6px] border-[#2d4ed6] py-1">
                     <p className="text-2xl font-black italic leading-tight tracking-tight text-slate-800">
                       {todayData.quote}
                     </p>
@@ -260,9 +256,9 @@
                 )}
               </section>
 
-              {/* 今日の目標（COMING UP と同様：鉛筆で編集・削除） */}
-              <section className="flex-1 overflow-hidden flex flex-col min-h-0">
-                <div className="flex items-center justify-between mb-3 text-[#3b66de]">
+              {/* 今日の目標（鉛筆で編集・＋で追加・最大4件入力／3件表示でスクロール） */}
+              <section className="flex-1 flex flex-col min-h-0">
+                <div className="flex items-center justify-between mb-3 text-[#2d4ed6]">
                   <div className="flex items-center">
                     <Check size={20} className="stroke-[4px]" />
                     <h2 className="text-sm font-black tracking-widest uppercase ml-2">今日の目標</h2>
@@ -270,14 +266,14 @@
                   <button
                     type="button"
                     onClick={() => setIsEditingGoals(!isEditingGoals)}
-                    className={`transition-all p-1.5 rounded-lg ${isEditingGoals ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-[#3b66de]'}`}
+                    className={`transition-all p-1.5 rounded-lg ${isEditingGoals ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-[#2d4ed6]'}`}
                     aria-label={isEditingGoals ? '編集を終了' : '目標を編集'}
                   >
                     {isEditingGoals ? <Save size={14} /> : <Edit2 size={14} />}
                   </button>
                 </div>
 
-                <div className="overflow-y-auto space-y-2 pr-1 pb-2 flex-1 min-h-0 scroll-smooth custom-scrollbar">
+                <div className="overflow-y-auto space-y-2 pr-1 pb-1 max-h-[176px] scroll-smooth custom-scrollbar">
                   {(Array.isArray(todayData.goals) ? todayData.goals : []).map((goal) => (
                     <div
                       key={goal.id}
@@ -287,7 +283,7 @@
                         <button
                           type="button"
                           onClick={() => toggleGoal(goal.id)}
-                          className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all flex-shrink-0 ${goal.completed ? 'bg-[#3b66de] border-[#3b66de]' : 'border-slate-200 bg-white'}`}
+                          className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all flex-shrink-0 ${goal.completed ? 'bg-[#2d4ed6] border-[#2d4ed6]' : 'border-slate-200 bg-white'}`}
                         >
                           {goal.completed && <Check size={16} className="text-white stroke-[4px]" />}
                         </button>
@@ -297,6 +293,7 @@
                               type="text"
                               value={goal.text}
                               onChange={(e) => editGoalText(goal.id, e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && addEmptyGoal()}
                               className="flex-1 min-w-0 bg-blue-50/50 border-b border-blue-100 px-2 py-1 text-lg font-bold text-[#334155] outline-none focus:border-blue-400 rounded-none"
                             />
                             <button
@@ -316,21 +313,18 @@
                       </div>
                     </div>
                   ))}
-                  {(Array.isArray(todayData.goals) ? todayData.goals : []).length < 4 && (
-                    <div className="flex items-center px-4 py-3 rounded-[20px] border bg-slate-50 border-slate-100">
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="w-7 h-7 rounded-full border-2 border-slate-200 bg-white flex-shrink-0" />
-                        <input
-                          type="text"
-                          value={newGoal}
-                          onChange={(e) => setNewGoal(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddGoal()}
-                          className="flex-1 bg-transparent text-lg font-bold text-[#334155] outline-none"
-                        />
-                      </div>
-                    </div>
-                  )}
                 </div>
+                {isEditingGoals && (Array.isArray(todayData.goals) ? todayData.goals : []).length < 4 && (
+                  <button
+                    type="button"
+                    onClick={addEmptyGoal}
+                    className="mt-2 flex items-center justify-center gap-2 px-4 py-3 rounded-[20px] border-2 border-dashed border-blue-200 text-[#2d4ed6] font-bold text-base bg-blue-50/40 hover:bg-blue-50 transition-all"
+                    aria-label="目標を追加"
+                  >
+                    <Plus size={18} className="stroke-[3px]" />
+                    目標を追加
+                  </button>
+                )}
               </section>
 
               {/* COMING UP */}
@@ -339,7 +333,7 @@
                   <h3 className="text-xs font-black text-slate-300 uppercase tracking-[0.4em]">COMING UP</h3>
                   <button
                     onClick={() => setIsEditingFuture(!isEditingFuture)}
-                    className={`transition-all p-1.5 rounded-lg ${isEditingFuture ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-[#3b66de]'}`}
+                    className={`transition-all p-1.5 rounded-lg ${isEditingFuture ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-[#2d4ed6]'}`}
                   >
                     {isEditingFuture ? <Save size={14} /> : <Edit2 size={14} />}
                   </button>
